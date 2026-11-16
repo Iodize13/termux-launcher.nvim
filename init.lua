@@ -55,6 +55,8 @@ if has_lazy then
           win_split_mode = "edit",
         },
       },
+      -- Syncs the org directory with the other devices when a teamtype daemon runs there.
+      { "teamtype/teamtype-nvim", lazy = false },
     },
     -- Termux has no luarocks, and orgmode does not need it.
     rocks = { enabled = false },

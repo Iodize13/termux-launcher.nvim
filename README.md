@@ -19,6 +19,10 @@ The first start clones [lazy.nvim](https://github.com/folke/lazy.nvim), which in
 
 `aapt` is optional. With it the app list shows real labels. Without it the list shows package names.
 
+## Sync
+
+The config loads [teamtype-nvim](https://github.com/teamtype/teamtype-nvim). Run `teamtype join` in `~/org` to sync the directory with other devices in real time. Without a running daemon the plugin does nothing.
+
 ## Use
 
 | Input | Effect |
