@@ -28,7 +28,19 @@ vim.api.nvim_create_autocmd("ColorScheme", { callback = transparent })
 
 -- The launcher is the one long-running process on the phone, so it owns the sync daemon.
 if vim.fn.executable("teamtype") == 1 and vim.uv.fs_stat(org_dir .. "/.teamtype/config") then
-  vim.fn.jobstart({ "teamtype", "join", "--directory", org_dir })
+  local socket = org_dir .. "/.teamtype/socket"
+  local probe = vim.uv.new_pipe()
+  probe:connect(socket, function(err)
+    probe:close()
+    if not err then
+      return -- a daemon already serves this directory
+    end
+    vim.schedule(function()
+      -- A killed daemon leaves its socket behind, and teamtype refuses to start over it.
+      os.remove(socket)
+      vim.fn.jobstart({ "teamtype", "join", "--directory", org_dir })
+    end)
+  end)
 end
 
 local lazypath = vim.fn.stdpath("data") .. "/lazy/lazy.nvim"
