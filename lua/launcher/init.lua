@@ -303,14 +303,23 @@ local function button_hl(id)
   return buttons[id].active() and "LauncherButtonOn" or "LauncherButton"
 end
 
-function M.buttons()
+-- One row of the two buttons as padded text. The statusline row and the bar window
+-- rows both use it so the seam between the buttons lines up.
+local function button_cells(width, with_icon)
+  local widths = { math.floor(width / 2), width - math.floor(width / 2) }
   local cells = {}
   for id, button in ipairs(buttons) do
-    cells[id] = ("%%#%s#%%%d@v:lua.LauncherTap@%%=%s%%=%%X"):format(
-      button_hl(id),
-      id,
-      config.button_rows == 1 and config.icons[button.icon] or ""
-    )
+    local icon = with_icon and config.icons[button.icon] or ""
+    local pad = widths[id] - fn.strdisplaywidth(icon)
+    cells[id] = (" "):rep(math.floor(pad / 2)) .. icon .. (" "):rep(pad - math.floor(pad / 2))
+  end
+  return cells
+end
+
+function M.buttons()
+  local cells = button_cells(api.nvim_win_get_width(S.prompt_win), config.button_rows == 1)
+  for id, cell in ipairs(cells) do
+    cells[id] = ("%%#%s#%%%d@v:lua.LauncherTap@%s%%X"):format(button_hl(id), id, cell)
   end
   return table.concat(cells)
 end
@@ -319,16 +328,9 @@ function paint_bar()
   if not S.bar_win then
     return
   end
-  local width = api.nvim_win_get_width(S.bar_win)
-  local widths = { math.floor(width / 2), width - math.floor(width / 2) }
   local lines, split = {}, {}
   for row = 1, api.nvim_win_get_height(S.bar_win) do
-    local cells = {}
-    for id, button in ipairs(buttons) do
-      local icon = row == 1 and config.icons[button.icon] or ""
-      local pad = widths[id] - fn.strdisplaywidth(icon)
-      cells[id] = (" "):rep(math.floor(pad / 2)) .. icon .. (" "):rep(pad - math.floor(pad / 2))
-    end
+    local cells = button_cells(api.nvim_win_get_width(S.bar_win), row == 1)
     lines[row], split[row] = table.concat(cells), #cells[1]
   end
   api.nvim_buf_set_lines(S.bar_buf, 0, -1, false, lines)
@@ -341,7 +343,7 @@ end
 function M.bar_tap()
   local pos = fn.getmousepos()
   if pos.winid == S.bar_win then
-    buttons[pos.wincol <= api.nvim_win_get_width(S.bar_win) / 2 and 1 or 2].tap()
+    buttons[pos.wincol <= math.floor(api.nvim_win_get_width(S.bar_win) / 2) and 1 or 2].tap()
   end
 end
 
@@ -374,15 +376,24 @@ function M.setup(opts)
   _G.LauncherTap = function(id)
     vim.schedule(buttons[id].tap)
   end
-  for name, link in pairs({
-    LauncherSel = "PmenuSel",
-    LauncherMatch = "Special",
-    LauncherIcon = "Title",
-    LauncherButton = "TabLine",
-    LauncherButtonOn = "TabLineSel",
-  }) do
+  for name, link in pairs({ LauncherSel = "PmenuSel", LauncherMatch = "Special", LauncherIcon = "Title" }) do
     api.nvim_set_hl(0, name, { link = link, default = true })
   end
+  -- A statusline blends a linked or partial group with StatusLine, so a button would change
+  -- colour between its statusline row and its window rows. Resolve to explicit colours.
+  local function solid_buttons()
+    local normal = api.nvim_get_hl(0, { name = "Normal", link = false })
+    for name, source in pairs({ LauncherButton = "Pmenu", LauncherButtonOn = "PmenuSel" }) do
+      local hl = api.nvim_get_hl(0, { name = source, link = false })
+      local fg, bg = hl.fg or normal.fg or 0xe0e2ea, hl.bg or normal.bg or 0x14161b
+      if hl.reverse then
+        fg, bg = bg, fg
+      end
+      api.nvim_set_hl(0, name, { fg = fg, bg = bg, default = true })
+    end
+  end
+  solid_buttons()
+  api.nvim_create_autocmd("ColorScheme", { callback = solid_buttons })
   api.nvim_create_user_command("Launcher", M.open, {})
   api.nvim_create_user_command("LauncherRefresh", M.refresh, {})
   api.nvim_create_autocmd("VimResized", {

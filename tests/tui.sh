@@ -103,6 +103,11 @@ expect "tapping a result launches it" grep -qx "start -n org.fdroid.fdroid/.view
 tap 48 "$height"
 expect "tapping the pencil shows the notes file" not_on_screen "water the plants"
 keys b u y Space m i l k Enter
+button_colors() {
+  tmux capture-pane -e -p -t "$session" | tail -n 3 | sed 's/ *$//' |
+    grep -o '48;2;[0-9;]*m' | sort -u | wc -l
+}
+expect "all three button rows use the same two colours" test "$(button_colors)" = 2
 expect "Enter in note mode appends a headline" grep -qx "\* buy milk" "$tmp/org/inbox.org"
 expect "the saved note is visible" on_screen "buy milk"
 keys c a m
