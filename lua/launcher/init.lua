@@ -30,6 +30,8 @@ local function message(lines)
   if api.nvim_win_get_buf(S.main_win) ~= S.list_buf then
     api.nvim_win_set_buf(S.main_win, S.list_buf)
   end
+  -- Row arithmetic for taps assumes one screen row per line.
+  vim.wo[S.main_win][0].wrap = false
 end
 
 local config = {
@@ -93,6 +95,15 @@ end
 function views.results(q)
   local rows = math.max(1, math.floor(api.nvim_win_get_height(S.main_win) / step()))
   local found, positions = unpack(fn.matchfuzzypos(S.items, q, { key = "text", limit = rows }))
+  local seen = {}
+  for _, item in ipairs(found) do
+    seen[item.component] = true
+  end
+  for _, item in ipairs(#found < rows and fn.matchfuzzy(S.items, q, { key = "pkg" }) or {}) do
+    if #found < rows and not seen[item.component] then
+      found[#found + 1] = item
+    end
+  end
   S.matches, S.sel = found, 1
   if #found == 0 then
     return message({ #S.items == 0 and "  no app list yet, run :LauncherRefresh" or "  no match" })
@@ -106,7 +117,12 @@ function views.results(q)
   end
   message(lines)
   for i, item in ipairs(found) do
-    for _, char in ipairs(positions[i]) do
+    if item.text ~= item.pkg then
+      api.nvim_buf_set_extmark(S.list_buf, ns, row_of(i), 0, {
+        virt_text = { { "  " .. item.pkg, "Comment" } },
+      })
+    end
+    for _, char in ipairs(positions[i] or {}) do
       api.nvim_buf_set_extmark(S.list_buf, ns, row_of(i), 2 + fn.byteidx(item.text, char), {
         end_col = 2 + fn.byteidx(item.text, char + 1),
         hl_group = "LauncherMatch",

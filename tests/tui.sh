@@ -25,9 +25,25 @@ priority=0 preferredOrder=0 match=0x108000 specificIndex=-1 isDefault=false
   com.android.camera/.Camera
 priority=0 preferredOrder=0 match=0x108000 specificIndex=-1 isDefault=false
   org.fdroid.fdroid/.views.main.MainActivity
+priority=0 preferredOrder=0 match=0x108000 specificIndex=-1 isDefault=false
+  com.termux/.app.TermuxActivity
+priority=0 preferredOrder=0 match=0x108000 specificIndex=-1 isDefault=false
+  com.example.determinism/.Main
 OUT
 EOF
-chmod +x "$tmp/bin/termux-am" "$tmp/bin/cmd"
+cat >"$tmp/bin/pm" <<'EOF'
+#!/bin/sh
+for last; do :; done
+echo "package:/apk/$last"
+EOF
+cat >"$tmp/bin/aapt" <<'EOF'
+#!/bin/sh
+case $3 in
+  /apk/com.termux) echo "application-label:'Termux'" ;;
+  /apk/com.example.determinism) echo "application-label:'Clock'" ;;
+esac
+EOF
+chmod +x "$tmp/bin/termux-am" "$tmp/bin/cmd" "$tmp/bin/pm" "$tmp/bin/aapt"
 printf '* TODO water the plants\n  SCHEDULED: <%s>\n' "$(date +%Y-%m-%d)" >"$tmp/org/todo.org"
 
 export PATH="$tmp/bin:$PATH" ORG_DIR="$tmp/org" XDG_CONFIG_HOME="$tmp/config" \
@@ -94,6 +110,10 @@ expect "typing in note mode does not search" not_on_screen "com.android.camera"
 
 tap 48 "$(bar)"
 expect "tapping the pencil again searches the kept text" on_screen "com.android.camera"
+
+keys Escape t e r m
+expect "package-only match is listed" on_screen "Clock"
+expect "a label match outranks a package-name match" sh -c "tmux capture-pane -p -t $session | grep -B2 '> term' | head -n 1 | grep -q 'Termux'"
 
 tap 3 "$(bar)"
 expect "tapping home returns to the agenda" on_screen "water the plants"

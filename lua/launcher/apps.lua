@@ -2,7 +2,8 @@ local M = {}
 
 ---@class LauncherItem
 ---@field component string  "package/activity", passed to `am start -n`
----@field text string       what the user sees and what fuzzy search matches
+---@field text string       app label, the first thing fuzzy search matches
+---@field pkg string        package name, matched when labels run out
 
 ---@param lines string[]  "label<TAB>package/activity"
 ---@return LauncherItem[]
@@ -12,10 +13,7 @@ function M.parse(lines)
     local label, component = line:match("^([^\t]+)\t(%S+/%S+)$")
     if label then
       local pkg = component:match("^[^/]+")
-      items[#items + 1] = {
-        component = component,
-        text = label == pkg and pkg or (label .. "  " .. pkg),
-      }
+      items[#items + 1] = { component = component, text = label, pkg = pkg }
     end
   end
   return items
