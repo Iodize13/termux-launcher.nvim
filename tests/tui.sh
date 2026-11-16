@@ -82,7 +82,8 @@ on_screen() { screen | grep -q -- "$1"; }
 not_on_screen() { ! on_screen "$1"; }
 
 expect "home shows the org agenda" on_screen "water the plants"
-expect "button bar is the bottom row" test "$(bar)" = "$(tmux display -p -t "$session" '#{pane_height}')"
+height=$(tmux display -p -t "$session" '#{pane_height}')
+expect "buttons are three rows tall at the bottom" test "$(bar)" = "$((height - 1))"
 expect "app list was built on first run" grep -q firefox "$tmp/cache/nvim/launcher-apps.tsv"
 
 keys f i r e
@@ -99,7 +100,7 @@ row=$(screen | grep -n "org.fdroid.fdroid" | cut -d: -f1)
 tap 10 "$row"
 expect "tapping a result launches it" grep -qx "start -n org.fdroid.fdroid/.views.main.MainActivity" "$tmp/launched"
 
-tap 48 "$(bar)"
+tap 48 "$height"
 expect "tapping the pencil shows the notes file" not_on_screen "water the plants"
 keys b u y Space m i l k Enter
 expect "Enter in note mode appends a headline" grep -qx "\* buy milk" "$tmp/org/inbox.org"
@@ -108,14 +109,14 @@ keys c a m
 sleep 0.3
 expect "typing in note mode does not search" not_on_screen "com.android.camera"
 
-tap 48 "$(bar)"
-expect "tapping the pencil again searches the kept text" on_screen "com.android.camera"
+tap 30 "$((height - 2))"
+expect "tapping the top row of the note button works too" on_screen "com.android.camera"
 
 keys Escape t e r m
 expect "package-only match is listed" on_screen "Clock"
 expect "a label match outranks a package-name match" sh -c "tmux capture-pane -p -t $session | grep -B2 '> term' | head -n 1 | grep -q 'Termux'"
 
-tap 3 "$(bar)"
+tap 20 "$height"
 expect "tapping home returns to the agenda" on_screen "water the plants"
 
 exit "$failed"

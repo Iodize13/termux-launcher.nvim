@@ -43,6 +43,8 @@ local config = {
     return { "* " .. text, "  [" .. os.date("%Y-%m-%d %a %H:%M") .. "]" }
   end,
   spacing = 1,
+  -- Height of the home and note buttons in rows. Each button is half the screen wide.
+  button_rows = 3,
   icons = { search = ">", note = "✎", home = "⌂" },
   -- Runs with the main window current and must leave the home buffer in it.
   home = function()
@@ -192,8 +194,11 @@ local function focus_prompt()
   vim.cmd("startinsert!")
 end
 
+local paint_bar
+
 local function chrome()
   vim.wo[S.prompt_win].statuscolumn = "%#LauncherIcon# " .. config.icons[S.mode] .. " "
+  paint_bar()
   vim.cmd.redrawstatus()
 end
 
@@ -249,7 +254,10 @@ local function ensure_buffers()
   if S.prompt_buf and api.nvim_buf_is_valid(S.prompt_buf) and api.nvim_buf_is_valid(S.list_buf) then
     return
   end
-  S.prompt_buf, S.list_buf = scratch(), scratch()
+  S.prompt_buf, S.list_buf, S.bar_buf = scratch(), scratch(), scratch()
+  map(S.bar_buf, { "i", "n" }, "<LeftRelease>", function()
+    M.bar_tap()
+  end)
   vim.bo[S.list_buf].modifiable = false
 
   api.nvim_create_autocmd({ "TextChangedI", "TextChanged" }, { buffer = S.prompt_buf, callback = render })
@@ -266,14 +274,22 @@ end
 
 local function ensure_layout()
   ensure_buffers()
-  if S.prompt_win and api.nvim_win_is_valid(S.prompt_win) and api.nvim_win_is_valid(S.main_win) then
+  local bar_rows = config.button_rows - 1
+  local valid = S.prompt_win and api.nvim_win_is_valid(S.prompt_win) and api.nvim_win_is_valid(S.main_win)
+  if valid and (bar_rows == 0 or api.nvim_win_is_valid(S.bar_win)) then
     return
   end
   vim.cmd("silent! only")
   S.main_win = api.nvim_get_current_win()
+  -- The prompt's statusline is the top row of the buttons. Extra rows are a window below it.
+  S.bar_win = bar_rows > 0
+      and api.nvim_open_win(S.bar_buf, false, { split = "below", win = S.main_win, height = bar_rows })
+    or nil
   S.prompt_win = api.nvim_open_win(S.prompt_buf, true, { split = "below", win = S.main_win, height = 1 })
-  for name, value in pairs({ winfixheight = true, number = false, relativenumber = false, signcolumn = "no" }) do
-    vim.wo[S.prompt_win][name] = value
+  for _, win in ipairs({ S.prompt_win, S.bar_win }) do
+    for name, value in pairs({ winfixheight = true, number = false, relativenumber = false, signcolumn = "no", wrap = false }) do
+      vim.wo[win][name] = value
+    end
   end
   vim.wo[S.prompt_win].statusline = "%!v:lua.require'launcher'.buttons()"
 end
@@ -283,21 +299,58 @@ local buttons = {
   { icon = "note", tap = function() M.toggle() end, active = function() return S.mode == "note" end },
 }
 
--- The button bar is the prompt window's statusline, the bottom row next to the keyboard.
+local function button_hl(id)
+  return buttons[id].active() and "LauncherButtonOn" or "LauncherButton"
+end
+
 function M.buttons()
   local cells = {}
   for id, button in ipairs(buttons) do
-    cells[id] = ("%%#%s#%%%d@v:lua.LauncherTap@   %s   %%X"):format(
-      button.active() and "LauncherButtonOn" or "LauncherButton",
+    cells[id] = ("%%#%s#%%%d@v:lua.LauncherTap@%%=%s%%=%%X"):format(
+      button_hl(id),
       id,
-      config.icons[button.icon]
+      config.button_rows == 1 and config.icons[button.icon] or ""
     )
   end
-  return cells[1] .. "%#LauncherButton#%=" .. cells[2]
+  return table.concat(cells)
+end
+
+function paint_bar()
+  if not S.bar_win then
+    return
+  end
+  local width = api.nvim_win_get_width(S.bar_win)
+  local widths = { math.floor(width / 2), width - math.floor(width / 2) }
+  local lines, split = {}, {}
+  for row = 1, api.nvim_win_get_height(S.bar_win) do
+    local cells = {}
+    for id, button in ipairs(buttons) do
+      local icon = row == 1 and config.icons[button.icon] or ""
+      local pad = widths[id] - fn.strdisplaywidth(icon)
+      cells[id] = (" "):rep(math.floor(pad / 2)) .. icon .. (" "):rep(pad - math.floor(pad / 2))
+    end
+    lines[row], split[row] = table.concat(cells), #cells[1]
+  end
+  api.nvim_buf_set_lines(S.bar_buf, 0, -1, false, lines)
+  for row, col in ipairs(split) do
+    api.nvim_buf_set_extmark(S.bar_buf, ns, row - 1, 0, { end_col = col, hl_group = button_hl(1) })
+    api.nvim_buf_set_extmark(S.bar_buf, ns, row - 1, col, { end_col = #lines[row], hl_group = button_hl(2) })
+  end
+end
+
+function M.bar_tap()
+  local pos = fn.getmousepos()
+  if pos.winid == S.bar_win then
+    buttons[pos.wincol <= api.nvim_win_get_width(S.bar_win) / 2 and 1 or 2].tap()
+  end
 end
 
 --- Show the launcher at its home screen. Safe to call again from any state.
 function M.open()
+  -- Set before the windows exist. Changing cmdheight later hands its row to the bottom window.
+  vim.o.showtabline, vim.o.cmdheight, vim.o.showmode = 0, 0, false
+  -- With a bar window the buttons end in that window, so the last window needs no statusline.
+  vim.o.laststatus = config.button_rows > 1 and 0 or 2
   ensure_layout()
   if #S.items == 0 then
     S.items = apps.load(config.cache)
@@ -305,7 +358,6 @@ function M.open()
       M.refresh()
     end
   end
-  vim.o.showtabline, vim.o.laststatus, vim.o.cmdheight, vim.o.showmode = 0, 2, 0, false
   vim.go.statusline = "%#WinSeparator#%{repeat('─', winwidth(0))}"
   S.mode, S.view = "search", nil
   set_query("")
@@ -333,6 +385,13 @@ function M.setup(opts)
   end
   api.nvim_create_user_command("Launcher", M.open, {})
   api.nvim_create_user_command("LauncherRefresh", M.refresh, {})
+  api.nvim_create_autocmd("VimResized", {
+    callback = function()
+      if S.bar_win and api.nvim_win_is_valid(S.bar_win) then
+        paint_bar()
+      end
+    end,
+  })
   api.nvim_create_autocmd("WinEnter", {
     callback = function()
       if api.nvim_get_current_win() == S.prompt_win then

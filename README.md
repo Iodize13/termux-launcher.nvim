@@ -42,6 +42,7 @@ The first start asks to install nvim-orgmode through `vim.pack` (nvim 0.12 or ne
 | `notes_file` | `$ORG_DIR/inbox.org` | where notes go |
 | `note` | headline plus inactive timestamp | function from the typed text to the lines to append |
 | `spacing` | `1` | blank rows between results, for larger tap targets |
+| `button_rows` | `3` | height of the home and note buttons, each half the screen wide |
 | `launch_cmd` | `termux-am start -n`, or `am start -n` if `termux-am` is missing | argv prefix for launching |
 | `refresh_cmd` | `bin/launcher-apps` | command that prints the app list |
 | `home` | orgmode agenda | function that fills the main window |
