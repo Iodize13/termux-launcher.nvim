@@ -6,7 +6,7 @@ set -eu
 have_aapt=0
 command -v aapt >/dev/null 2>&1 && have_aapt=1
 
-cmd package query-activities --brief \
+cmd package query-activities --brief --user 0 \
   -a android.intent.action.MAIN -c android.intent.category.LAUNCHER |
   sed -n 's/^ *\([A-Za-z0-9_.]*\/[A-Za-z0-9_.$]*\) *$/\1/p' |
   sort -u |
@@ -14,7 +14,7 @@ cmd package query-activities --brief \
     pkg=${component%%/*}
     label=
     if [ "$have_aapt" = 1 ]; then
-      apk=$(pm path "$pkg" 2>/dev/null | sed -n '1s/^package://p')
+      apk=$(pm path --user 0 "$pkg" 2>/dev/null | sed -n '1s/^package://p')
       if [ -n "$apk" ]; then
         label=$(aapt dump badging "$apk" 2>/dev/null |
           sed -n "s/^application-label:'\(.*\)'\$/\1/p" | head -n 1)
