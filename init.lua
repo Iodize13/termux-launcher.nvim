@@ -26,25 +26,50 @@ end
 transparent()
 vim.api.nvim_create_autocmd("ColorScheme", { callback = transparent })
 
-local has_org, orgmode = pcall(require, "orgmode")
-if not has_org and vim.pack then
-  pcall(vim.pack.add, { "https://github.com/nvim-orgmode/orgmode" })
-  has_org, orgmode = pcall(require, "orgmode")
-end
-if has_org then
-  orgmode.setup({
-    org_agenda_files = org_dir .. "/**/*",
-    org_default_notes_file = org_dir .. "/inbox.org",
-    -- The launcher shows the agenda inside its own main window.
-    win_split_mode = "edit",
-  })
-  vim.api.nvim_create_autocmd("FileType", {
-    pattern = "orgagenda",
-    callback = function(ev)
-      vim.keymap.set("n", "<2-LeftMouse>", "<CR>", { buffer = ev.buf, remap = true })
-    end,
+local lazypath = vim.fn.stdpath("data") .. "/lazy/lazy.nvim"
+if not vim.uv.fs_stat(lazypath) then
+  vim.fn.system({
+    "git",
+    "clone",
+    "--filter=blob:none",
+    "--branch=stable",
+    "https://github.com/folke/lazy.nvim.git",
+    lazypath,
   })
 end
+vim.opt.rtp:prepend(lazypath)
+
+-- The launcher still works without orgmode, so a failed clone must not stop startup.
+local has_lazy, lazy = pcall(require, "lazy")
+if has_lazy then
+  lazy.setup({
+    spec = {
+      {
+        "nvim-orgmode/orgmode",
+        -- The home screen is the agenda, so there is nothing to defer.
+        lazy = false,
+        opts = {
+          org_agenda_files = org_dir .. "/**/*",
+          org_default_notes_file = org_dir .. "/inbox.org",
+          -- The launcher shows the agenda inside its own main window.
+          win_split_mode = "edit",
+        },
+      },
+    },
+    -- Termux has no luarocks, and orgmode does not need it.
+    rocks = { enabled = false },
+    -- The default would switch to habamax while installing and change the launcher colours.
+    install = { colorscheme = {} },
+    change_detection = { enabled = false },
+  })
+end
+
+vim.api.nvim_create_autocmd("FileType", {
+  pattern = "orgagenda",
+  callback = function(ev)
+    vim.keymap.set("n", "<2-LeftMouse>", "<CR>", { buffer = ev.buf, remap = true })
+  end,
+})
 
 require("launcher").setup({ notes_file = org_dir .. "/inbox.org" })
 

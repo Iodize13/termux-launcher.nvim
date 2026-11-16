@@ -1,6 +1,7 @@
 #!/bin/sh
 # Drives the real TUI in tmux with stubbed Android commands.
-# Usage: ORGMODE_DIR=/path/to/nvim-orgmode tests/tui.sh
+# Usage: tests/tui.sh
+# lazy.nvim clones itself and orgmode unless LAZY_DIR or ORGMODE_DIR name a local checkout to copy.
 set -eu
 
 repo=$(cd "$(dirname "$0")/.." && pwd)
@@ -8,9 +9,11 @@ tmp=$(mktemp -d)
 session="launcher-test-$$"
 trap 'tmux kill-session -t "$session" 2>/dev/null || true; rm -rf "$tmp"' EXIT
 
-mkdir -p "$tmp/bin" "$tmp/config" "$tmp/org" "$tmp/data/nvim/site/pack/test/start"
+mkdir -p "$tmp/bin" "$tmp/config" "$tmp/org" "$tmp/data/nvim/lazy"
 ln -s "$repo" "$tmp/config/nvim"
-ln -s "${ORGMODE_DIR:?set ORGMODE_DIR to an nvim-orgmode checkout}" "$tmp/data/nvim/site/pack/test/start/orgmode"
+# lazy.nvim does not count a symlink as an installed plugin.
+if [ -n "${LAZY_DIR:-}" ]; then cp -R "$LAZY_DIR" "$tmp/data/nvim/lazy/lazy.nvim"; fi
+if [ -n "${ORGMODE_DIR:-}" ]; then cp -R "$ORGMODE_DIR" "$tmp/data/nvim/lazy/orgmode"; fi
 
 cat >"$tmp/bin/termux-am" <<EOF
 #!/bin/sh
@@ -49,8 +52,9 @@ printf '* TODO water the plants\n  SCHEDULED: <%s>\n' "$(date +%Y-%m-%d)" >"$tmp
 export PATH="$tmp/bin:$PATH" ORG_DIR="$tmp/org" XDG_CONFIG_HOME="$tmp/config" \
   XDG_DATA_HOME="$tmp/data" XDG_STATE_HOME="$tmp/state" XDG_CACHE_HOME="$tmp/cache"
 
-# orgmode compiles its tree-sitter grammar on first start and reports it with a hit-enter prompt.
-nvim --headless -c 'lua vim.wait(120000, function() return pcall(vim.treesitter.language.inspect, "org") end)' -c 'qa!' 2>/dev/null
+# The first start installs the plugins, and orgmode compiles its tree-sitter grammar
+# and reports it with a hit-enter prompt.
+nvim --headless "+Lazy! install" -c 'lua vim.wait(120000, function() return pcall(vim.treesitter.language.inspect, "org") end)' -c 'qa!' 2>/dev/null
 
 tmux new-session -d -s "$session" -x 50 -y 24 nvim
 

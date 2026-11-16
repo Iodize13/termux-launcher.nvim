@@ -15,7 +15,7 @@ git clone https://github.com/Iodize13/termux-launcher.nvim ~/.config/nvim
 nvim
 ```
 
-The first start asks to install nvim-orgmode through `vim.pack` (nvim 0.12 or newer) and compiles its tree-sitter grammar, which needs `clang`. If orgmode is already on the runtimepath, the config uses that copy.
+The first start clones [lazy.nvim](https://github.com/folke/lazy.nvim), which installs nvim-orgmode, and orgmode compiles its tree-sitter grammar, which needs `clang`. Plugins live in `~/.local/share/nvim/lazy`. `:Lazy` updates them.
 
 `aapt` is optional. With it the app list shows real labels. Without it the list shows package names.
 
@@ -53,7 +53,9 @@ Set `ORG_DIR` to use a directory other than `~/org`.
 ## Test
 
 ```sh
-ORGMODE_DIR=/path/to/nvim-orgmode tests/tui.sh
+tests/tui.sh
 ```
+
+The first start in the test clones lazy.nvim and orgmode. Set `LAZY_DIR` or `ORGMODE_DIR` to a local checkout to copy that instead.
 
 The script runs the real TUI inside tmux, sends keys and mouse taps, and stubs `termux-am` and `cmd`. It does not run on Android, so it does not cover `bin/launcher-apps` against a real package manager or the launch latency.
