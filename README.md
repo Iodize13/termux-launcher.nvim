@@ -11,7 +11,7 @@ An nvim config that turns a Termux session into a touch-driven app launcher.
 
 ```sh
 pkg install neovim git clang termux-am-socket aapt
-git clone https://github.com/Iodize13/nvim ~/.config/nvim
+git clone https://github.com/Iodize13/termux-launcher.nvim ~/.config/nvim
 nvim
 ```
 
