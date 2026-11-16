@@ -5,7 +5,7 @@ An nvim config that turns a Termux session into a touch-driven app launcher.
 - The home screen is the org agenda for `~/org`.
 - Typing runs a fuzzy search over installed apps. The prompt sits at the bottom next to the keyboard, and results grow upward with the best match directly above it.
 - Enter or a tap starts the app with `termux-am start -n <package/activity>`.
-- Tapping the pencil swaps the prompt from search to note. Enter then appends a headline to `~/org/inbox.org`.
+- Tapping the pencil swaps the prompt from search to note. Enter then appends a headline to `~/org/note.org`.
 
 ## Install
 
@@ -21,7 +21,7 @@ The first start clones [lazy.nvim](https://github.com/folke/lazy.nvim), which in
 
 ## Sync
 
-The config loads [teamtype-nvim](https://github.com/teamtype/teamtype-nvim). Run `teamtype join` in `~/org` to sync the directory with other devices in real time. Without a running daemon the plugin does nothing.
+The config loads [teamtype-nvim](https://github.com/teamtype/teamtype-nvim). When `teamtype` is installed and `~/org/.teamtype/config` names a peer, the launcher starts `teamtype join` for `~/org` and stops it on exit, so the directory syncs with other devices in real time. Otherwise the plugin does nothing.
 
 ## Use
 
@@ -43,7 +43,7 @@ The config loads [teamtype-nvim](https://github.com/teamtype/teamtype-nvim). Run
 
 | Option | Default | Meaning |
 | --- | --- | --- |
-| `notes_file` | `$ORG_DIR/inbox.org` | where notes go |
+| `notes_file` | `$ORG_DIR/note.org` | where notes go |
 | `note` | headline plus inactive timestamp | function from the typed text to the lines to append |
 | `spacing` | `1` | blank rows between results, for larger tap targets |
 | `button_rows` | `3` | height of the home and note buttons, each half the screen wide |

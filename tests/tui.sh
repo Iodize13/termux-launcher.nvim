@@ -115,7 +115,7 @@ expect "the active button is one solid colour on all three rows, the other is tr
   test "$(button_colors)" = "3 "
 expect "the main window has no background" sh -c \
   "! tmux capture-pane -e -p -t $session | head -n 10 | grep -q '48;2;'"
-expect "Enter in note mode appends a headline" grep -qx "\* buy milk" "$tmp/org/inbox.org"
+expect "Enter in note mode appends a headline" grep -qx "\* buy milk" "$tmp/org/note.org"
 expect "the saved note is visible" on_screen "buy milk"
 keys c a m
 sleep 0.3

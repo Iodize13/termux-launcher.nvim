@@ -26,6 +26,11 @@ end
 transparent()
 vim.api.nvim_create_autocmd("ColorScheme", { callback = transparent })
 
+-- The launcher is the one long-running process on the phone, so it owns the sync daemon.
+if vim.fn.executable("teamtype") == 1 and vim.uv.fs_stat(org_dir .. "/.teamtype/config") then
+  vim.fn.jobstart({ "teamtype", "join", "--directory", org_dir })
+end
+
 local lazypath = vim.fn.stdpath("data") .. "/lazy/lazy.nvim"
 if not vim.uv.fs_stat(lazypath) then
   vim.fn.system({
@@ -50,7 +55,7 @@ if has_lazy then
         lazy = false,
         opts = {
           org_agenda_files = org_dir .. "/**/*",
-          org_default_notes_file = org_dir .. "/inbox.org",
+          org_default_notes_file = org_dir .. "/note.org",
           -- The launcher shows the agenda inside its own main window.
           win_split_mode = "edit",
         },
@@ -73,7 +78,7 @@ vim.api.nvim_create_autocmd("FileType", {
   end,
 })
 
-require("launcher").setup({ notes_file = org_dir .. "/inbox.org" })
+require("launcher").setup({ notes_file = org_dir .. "/note.org" })
 
 vim.api.nvim_create_autocmd("VimEnter", {
   callback = function()
