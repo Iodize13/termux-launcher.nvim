@@ -104,6 +104,13 @@ if has_lazy then
           drop_category(require("orgmode.agenda.types.todo"), "_build_line")
         end,
       },
+      {
+        "nvim-orgmode/org-bullets.nvim",
+        ft = "org",
+        -- It skips the cursor line of the current window, which is the prompt, so the first
+        -- headline of every note file would keep its star.
+        opts = { concealcursor = true },
+      },
       -- Syncs the org directory with the other devices when a teamtype daemon runs there.
       { "teamtype/teamtype-nvim", lazy = false },
       -- Lists what each prefix leads to, so orgmode's <leader>o keys need no memorising.
