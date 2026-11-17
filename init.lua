@@ -92,8 +92,8 @@ vim.api.nvim_create_autocmd("FileType", {
 
 require("launcher").setup({
   notes = {
-    { file = org_dir .. "/note.org", icon = "✎" },
     { file = org_dir .. "/inbox.org", icon = "✦" },
+    { file = org_dir .. "/note.org", icon = "✎" },
   },
 })
 

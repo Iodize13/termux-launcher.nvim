@@ -105,7 +105,7 @@ tap 10 "$row"
 expect "tapping a result launches it" grep -qx "start -n org.fdroid.fdroid/.views.main.MainActivity" "$tmp/launched"
 
 tap 25 "$height"
-expect "tapping the pencil shows the notes file" not_on_screen "water the plants"
+expect "tapping the star shows the inbox file" not_on_screen "water the plants"
 keys b u y Space m i l k Enter
 button_colors() {
   tmux capture-pane -e -p -t "$session" | tail -n 3 | sed 's/ *$//' |
@@ -115,7 +115,7 @@ expect "the active button is one solid colour on all three rows, the other is tr
   test "$(button_colors)" = "3 "
 expect "the main window has no background" sh -c \
   "! tmux capture-pane -e -p -t $session | head -n 10 | grep -q '48;2;'"
-expect "Enter in note mode appends a headline" grep -qx "\* buy milk" "$tmp/org/note.org"
+expect "Enter in note mode appends a headline" grep -qx "\* buy milk" "$tmp/org/inbox.org"
 expect "the saved note is visible" on_screen "buy milk"
 keys c a m
 sleep 0.3
@@ -126,8 +126,8 @@ expect "tapping the top row of the note button works too" on_screen "com.android
 
 tap 45 "$height"
 keys Enter
-expect "the second note button writes to its own file" grep -qx "\* cam" "$tmp/org/inbox.org"
-expect "the first notes file is left alone" sh -c "! grep -q cam '$tmp/org/note.org'"
+expect "the second note button writes to its own file" grep -qx "\* cam" "$tmp/org/note.org"
+expect "the first notes file is left alone" sh -c "! grep -q cam '$tmp/org/inbox.org'"
 tap 45 "$height"
 expect "tapping the active note button returns to search" on_screen "water the plants"
 

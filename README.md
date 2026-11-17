@@ -5,7 +5,7 @@ An nvim config that turns a Termux session into a touch-driven app launcher.
 - The home screen is the org agenda for `~/org`.
 - Typing runs a fuzzy search over installed apps. The prompt sits at the bottom next to the keyboard, and results grow upward with the best match directly above it.
 - Enter or a tap starts the app with `termux-am start -n <package/activity>`.
-- Tapping the pencil swaps the prompt from search to note. Enter then appends a headline to `~/org/note.org`. The star does the same for `~/org/inbox.org`.
+- Tapping the star swaps the prompt from search to note. Enter then appends a headline to `~/org/inbox.org`. The pencil does the same for `~/org/note.org`.
 
 ## Install
 
