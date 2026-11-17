@@ -7,7 +7,8 @@ set -eu
 repo=$(cd "$(dirname "$0")/.." && pwd)
 tmp=$(mktemp -d)
 session="launcher-test-$$"
-trap 'tmux kill-session -t "$session" 2>/dev/null || true; rm -rf "$tmp"' EXIT
+daemon=
+trap 'tmux kill-session -t "$session" 2>/dev/null || true; [ -z "$daemon" ] || kill "$daemon"; rm -rf "$tmp"' EXIT
 
 mkdir -p "$tmp/bin" "$tmp/config" "$tmp/org" "$tmp/data/nvim/lazy"
 ln -s "$repo" "$tmp/config/nvim"
@@ -48,6 +49,14 @@ esac
 EOF
 chmod +x "$tmp/bin/termux-am" "$tmp/bin/cmd" "$tmp/bin/pm" "$tmp/bin/aapt"
 printf '* TODO water the plants :garden:\n  SCHEDULED: <%s>\n' "$(date +%Y-%m-%d)" >"$tmp/org/todo.org"
+
+# With teamtype installed, sync the org directory as on the phone, so the notes go through the daemon.
+if command -v teamtype >/dev/null; then
+  mkdir "$tmp/org/.teamtype"
+  teamtype share --directory "$tmp/org" >"$tmp/teamtype.log" 2>&1 &
+  daemon=$!
+  until [ -S "$tmp/org/.teamtype/socket" ]; do sleep 0.1; done
+fi
 
 export PATH="$tmp/bin:$PATH" ORG_DIR="$tmp/org" XDG_CONFIG_HOME="$tmp/config" \
   XDG_DATA_HOME="$tmp/data" XDG_STATE_HOME="$tmp/state" XDG_CACHE_HOME="$tmp/cache"
@@ -107,6 +116,11 @@ tap 10 "$row"
 expect "tapping a result launches it" grep -qx "start -n org.fdroid.fdroid/.views.main.MainActivity" "$tmp/launched"
 
 tap 25 "$height"
+if [ -n "$daemon" ]; then
+  # The first org buffer connects to the daemon, and that message joins the app count in a hit-enter prompt.
+  expect "opening an org file connects to teamtype" on_screen "Press ENTER"
+  keys Enter
+fi
 expect "tapping the star shows the inbox file" not_on_screen "water the plants"
 expect "note mode shows a todo chip and a chip per configured tag, not the org file's tag" \
   on_screen "^ TODO   Grocery   Qualiva   Shopping   University$"
@@ -135,6 +149,9 @@ tap 30 "$((height - 2))"
 expect "tapping the top row of the note button works too" on_screen "com.android.camera"
 
 tap 45 "$height"
+# teamtype starts tracking a newly opened file a moment later. A note saved before that
+# is written by nvim while the daemon writes the same file. A person is never that quick.
+sleep 0.3
 tap 3 "$chips"
 keys Enter
 expect "tapping the todo chip drops TODO, and saving cleared the tag" grep -qx "\* cam" "$tmp/org/note.org"
@@ -148,5 +165,15 @@ expect "a label match outranks a package-name match" sh -c "tmux capture-pane -p
 
 tap 5 "$height"
 expect "tapping home returns to the agenda" on_screen "water the plants"
+
+# The agenda re-reads org files whose disk copy changed, which here comes from outside nvim.
+# That must not reload the synced buffer, or teamtype-nvim opens note.org a second time on
+# top of the first, and the daemon rejects the edits that follow.
+printf '* from the desktop\n' >>"$tmp/org/note.org"
+tap 5 "$height"
+tap 45 "$height"
+keys s y n c e d Enter
+expect "a note saved after the agenda refreshed reaches the file" grep -qx "\* TODO synced" "$tmp/org/note.org"
+expect "teamtype accepts every edit" not_on_screen "Invalid edit"
 
 exit "$failed"

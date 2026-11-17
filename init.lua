@@ -102,6 +102,13 @@ if has_lazy then
           drop_category(agenda, "_build_line")
           drop_category(agenda, "_build_time_grid_line")
           drop_category(require("orgmode.agenda.types.todo"), "_build_line")
+          -- teamtype keeps a synced buffer unmodified while the daemon writes the file after
+          -- it, so orgmode would reload the buffer from disk on every agenda refresh. Each
+          -- reload makes teamtype-nvim open the file again on top of its old tracking, and the
+          -- daemon then rejects the next edit. The daemon keeps these buffers current anyway.
+          if vim.uv.fs_stat(org_dir .. "/.teamtype") then
+            require("orgmode.files.file")._reload_buffer_from_disk = function() end
+          end
         end,
       },
       {

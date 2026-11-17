@@ -203,8 +203,11 @@ local function save_note(text)
   fn.bufload(buf)
   local empty = api.nvim_buf_line_count(buf) == 1 and api.nvim_buf_get_lines(buf, 0, 1, false)[1] == ""
   api.nvim_buf_set_lines(buf, empty and 0 or -1, -1, false, lines)
+  -- teamtype clears 'modified' on a synced buffer and writes the file itself, so only an
+  -- unsynced buffer is written. Its write guard can land on another buffer, so a plain
+  -- :write here would race the daemon.
   api.nvim_buf_call(buf, function()
-    vim.cmd("silent write")
+    vim.cmd("silent update")
   end)
   if api.nvim_win_get_buf(S.main_win) == buf then
     api.nvim_win_set_cursor(S.main_win, { api.nvim_buf_line_count(buf), 0 })
