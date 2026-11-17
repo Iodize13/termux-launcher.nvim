@@ -12,6 +12,10 @@ local S = {
   items = {}, ---@type LauncherItem[]
   matches = {}, ---@type LauncherItem[]
   sel = 1,
+  todo = true, -- the next note starts with config.todo
+  tags = {}, ---@type table<string, true>  tags the next note gets
+  tag_list = {}, ---@type string[]  every tag offered as a chip
+  chips = {}, ---@type { row: integer, col: integer, width: integer, tap: fun() }[]  as last drawn
   prompt_buf = nil,
   list_buf = nil,
   prompt_win = nil,
@@ -40,13 +44,33 @@ local config = {
   launch_cmd = nil, ---@type string[]?  defaults to termux-am, then am
   -- Each entry gets its own button, in this order after the home button.
   notes = { { file = "~/org/note.org", icon = "✎" } }, ---@type { file: string, icon: string }[]
-  note = function(text)
-    return { "* " .. text, "  [" .. os.date("%Y-%m-%d %a %H:%M") .. "]" }
+  -- New notes start with this keyword. A chip above the prompt turns it off. false drops the chip.
+  todo = "TODO", ---@type string|false
+  -- Tags offered as chips above the prompt while writing a note.
+  tags = function()
+    local ok, list = pcall(function()
+      return require("orgmode").files:get_tags()
+    end)
+    return ok and list or {}
+  end,
+  ---@param meta { todo: string?, tags: string[] }
+  note = function(text, meta)
+    local tags = #meta.tags > 0 and " :" .. table.concat(meta.tags, ":") .. ":" or ""
+    local todo = meta.todo and meta.todo .. " " or ""
+    return { "* " .. todo .. text .. tags, "  [" .. os.date("%Y-%m-%d %a %H:%M") .. "]" }
   end,
   spacing = 1,
   -- Height of the home and note buttons in rows. The buttons share the screen width evenly.
   button_rows = 3,
   icons = { search = ">", home = "⌂" },
+  -- Highlight groups whose foreground tints each part. An off part shows the colour in its
+  -- text, an active one fills with it. A notes entry can set its own `color`.
+  colors = {
+    home = "DiagnosticHint",
+    todo = "DiagnosticError",
+    -- Notes buttons and tag chips each take these in order, so neighbours differ.
+    cycle = { "DiagnosticWarn", "DiagnosticOk", "DiagnosticInfo", "DiagnosticHint", "DiagnosticError" },
+  },
   -- Runs with the main window current and must leave the home buffer in it.
   home = function()
     local ok, org = pcall(require, "orgmode")
@@ -57,6 +81,25 @@ local config = {
     end
   end,
 }
+
+local tinted = {}
+
+-- A statusline blends a linked or partial group with StatusLine, so a button would change
+-- colour between its statusline row and its window rows. Resolve to explicit colours.
+local function tint(source, on)
+  local name = "Launcher" .. source:gsub("%W", "") .. (on and "On" or "")
+  if not tinted[name] then
+    local normal = api.nvim_get_hl(0, { name = "Normal", link = false })
+    local color = api.nvim_get_hl(0, { name = source, link = false }).fg or normal.fg or 0xe0e2ea
+    api.nvim_set_hl(0, name, on and { fg = normal.bg or 0x14161b, bg = color } or { fg = color })
+    tinted[name] = true
+  end
+  return name
+end
+
+local function cycle_color(i)
+  return config.colors.cycle[(i - 1) % #config.colors.cycle + 1]
+end
 
 local function step()
   return 1 + config.spacing
@@ -144,13 +187,22 @@ local function set_query(text)
   api.nvim_buf_set_lines(S.prompt_buf, 0, -1, false, { text })
 end
 
+local function reset_note()
+  S.todo, S.tags = true, {}
+end
+
 local function save_note(text)
+  local tags = vim.tbl_filter(function(tag)
+    return S.tags[tag]
+  end, S.tag_list)
+  local lines = config.note(text, { todo = config.todo and S.todo and config.todo or nil, tags = tags })
+  reset_note()
   local path = fn.expand(config.notes[S.target].file)
   fn.mkdir(vim.fs.dirname(path), "p")
   local buf = fn.bufadd(path)
   fn.bufload(buf)
   local empty = api.nvim_buf_line_count(buf) == 1 and api.nvim_buf_get_lines(buf, 0, 1, false)[1] == ""
-  api.nvim_buf_set_lines(buf, empty and 0 or -1, -1, false, config.note(text))
+  api.nvim_buf_set_lines(buf, empty and 0 or -1, -1, false, lines)
   api.nvim_buf_call(buf, function()
     vim.cmd("silent write")
   end)
@@ -159,10 +211,63 @@ local function save_note(text)
   end
 end
 
+local function plain(win)
+  for name, value in pairs({ winfixheight = true, number = false, relativenumber = false, signcolumn = "no", wrap = false }) do
+    vim.wo[win][name] = value
+  end
+end
+
+local function hide_chips()
+  if S.chip_win and api.nvim_win_is_valid(S.chip_win) then
+    api.nvim_win_close(S.chip_win, true)
+  end
+  S.chip_win, S.chips = nil, {}
+end
+
+-- The todo chip, then one chip per tag, wrapped into rows of the main window's width.
+-- Drawing and tapping both read S.chips so they agree.
+local function paint_chips()
+  local list = {}
+  if config.todo then
+    list[1] = { label = config.todo, color = config.colors.todo, on = S.todo, tap = function() S.todo = not S.todo end }
+  end
+  for i, tag in ipairs(S.tag_list) do
+    list[#list + 1] = { label = tag, color = cycle_color(i), on = S.tags[tag], tap = function() S.tags[tag] = not S.tags[tag] or nil end }
+  end
+  if #list == 0 then
+    return hide_chips()
+  end
+  local width, lines, marks = api.nvim_win_get_width(S.main_win), { "" }, {}
+  S.chips = {}
+  for _, chip in ipairs(list) do
+    local text = " " .. chip.label .. " "
+    local w = fn.strdisplaywidth(text)
+    local col = fn.strdisplaywidth(lines[#lines])
+    if col > 0 and col + w > width then
+      lines[#lines + 1], col = "", 0
+    end
+    local line = lines[#lines]
+    marks[#marks + 1] = { #lines - 1, #line, #line + #text, tint(chip.color, chip.on) }
+    S.chips[#S.chips + 1] = { row = #lines, col = col, width = w, tap = chip.tap }
+    lines[#lines] = line .. text .. " "
+  end
+  if S.chip_win and api.nvim_win_is_valid(S.chip_win) then
+    api.nvim_win_set_height(S.chip_win, #lines)
+  else
+    S.chip_win = api.nvim_open_win(S.chip_buf, false, { split = "below", win = S.main_win, height = #lines })
+    plain(S.chip_win)
+  end
+  api.nvim_buf_set_lines(S.chip_buf, 0, -1, false, lines)
+  for _, m in ipairs(marks) do
+    api.nvim_buf_set_extmark(S.chip_buf, ns, m[1], m[2], { end_col = m[3], hl_group = m[4] })
+  end
+end
+
 ---@type table<string, { render: fun(q: string), submit: fun(q: string) }>
 local modes = {
   search = {
     render = function(q)
+      hide_chips()
       show(q == "" and "home" or "results", q)
     end,
     submit = function()
@@ -176,6 +281,7 @@ local modes = {
   note = {
     render = function()
       show("notes")
+      paint_chips()
     end,
     submit = function(q)
       if q:match("%S") then
@@ -221,6 +327,9 @@ end
 -- The typed text stays, so a half-typed search can become a note.
 local function enter(target)
   S.target, S.view = target, nil
+  if target then
+    S.tag_list = config.tags()
+  end
   chrome()
   render()
   focus_prompt()
@@ -247,6 +356,18 @@ function M.tap()
   end
 end
 
+function M.chip_tap()
+  local pos = fn.getmousepos()
+  for _, chip in ipairs(S.chips) do
+    if pos.winid == S.chip_win and pos.winrow == chip.row and pos.wincol > chip.col and pos.wincol <= chip.col + chip.width then
+      chip.tap()
+      paint_chips()
+      break
+    end
+  end
+  focus_prompt()
+end
+
 function M.refresh()
   apps.refresh(config.refresh_cmd, config.cache, function(items, err)
     if not items then
@@ -271,15 +392,17 @@ local function ensure_buffers()
   if S.prompt_buf and api.nvim_buf_is_valid(S.prompt_buf) and api.nvim_buf_is_valid(S.list_buf) then
     return
   end
-  S.prompt_buf, S.list_buf, S.bar_buf = scratch(), scratch(), scratch()
-  -- Two quick taps on a button arrive as a double click, which starts a selection in the bar.
-  for _, lhs in ipairs({ "<LeftRelease>", "<2-LeftRelease>", "<3-LeftRelease>", "<4-LeftRelease>" }) do
-    map(S.bar_buf, { "i", "n", "x" }, lhs, function()
-      if fn.mode() ~= "n" then
-        vim.cmd("normal! \27")
-      end
-      M.bar_tap()
-    end)
+  S.prompt_buf, S.list_buf, S.bar_buf, S.chip_buf = scratch(), scratch(), scratch(), scratch()
+  -- Two quick taps on a button arrive as a double click, which starts a selection.
+  for buf, handler in pairs({ [S.bar_buf] = M.bar_tap, [S.chip_buf] = M.chip_tap }) do
+    for _, lhs in ipairs({ "<LeftRelease>", "<2-LeftRelease>", "<3-LeftRelease>", "<4-LeftRelease>" }) do
+      map(buf, { "i", "n", "x" }, lhs, function()
+        if fn.mode() ~= "n" then
+          vim.cmd("normal! \27")
+        end
+        handler()
+      end)
+    end
   end
   vim.bo[S.list_buf].modifiable = false
 
@@ -310,9 +433,7 @@ local function ensure_layout()
     or nil
   S.prompt_win = api.nvim_open_win(S.prompt_buf, true, { split = "below", win = S.main_win, height = 1 })
   for _, win in ipairs({ S.prompt_win, S.bar_win }) do
-    for name, value in pairs({ winfixheight = true, number = false, relativenumber = false, signcolumn = "no", wrap = false }) do
-      vim.wo[win][name] = value
-    end
+    plain(win)
   end
   vim.wo[S.prompt_win].statusline = "%!v:lua.require'launcher'.buttons()"
 end
@@ -321,10 +442,16 @@ end
 local buttons = {}
 
 local function build_buttons()
-  buttons = { { icon = config.icons.home, tap = function() M.open() end, active = function() return false end } }
+  buttons = { {
+    icon = config.icons.home,
+    color = config.colors.home,
+    tap = function() M.open() end,
+    active = function() return false end,
+  } }
   for target, note in ipairs(config.notes) do
     buttons[#buttons + 1] = {
       icon = note.icon,
+      color = note.color or cycle_color(target),
       tap = function() M.toggle(target) end,
       active = function() return S.target == target end,
     }
@@ -332,7 +459,7 @@ local function build_buttons()
 end
 
 local function button_hl(id)
-  return buttons[id].active() and "LauncherButtonOn" or "LauncherButton"
+  return tint(buttons[id].color, buttons[id].active())
 end
 
 -- Last screen column of button `id`. Drawing and tapping both use it so they agree.
@@ -405,6 +532,7 @@ function M.open()
   end
   vim.go.statusline = "%#WinSeparator#%{repeat('─', winwidth(0))}"
   S.target, S.view = nil, nil
+  reset_note()
   set_query("")
   chrome()
   render()
@@ -423,27 +551,20 @@ function M.setup(opts)
   for name, link in pairs({ LauncherSel = "PmenuSel", LauncherMatch = "Special", LauncherIcon = "Title" }) do
     api.nvim_set_hl(0, name, { link = link, default = true })
   end
-  -- A statusline blends a linked or partial group with StatusLine, so a button would change
-  -- colour between its statusline row and its window rows. Resolve to explicit colours.
-  local function solid_buttons()
-    local normal = api.nvim_get_hl(0, { name = "Normal", link = false })
-    for name, source in pairs({ LauncherButton = "Pmenu", LauncherButtonOn = "PmenuSel" }) do
-      local hl = api.nvim_get_hl(0, { name = source, link = false })
-      local fg, bg = hl.fg or normal.fg or 0xe0e2ea, hl.bg or normal.bg or 0x14161b
-      if hl.reverse then
-        fg, bg = bg, fg
-      end
-      api.nvim_set_hl(0, name, { fg = fg, bg = bg, default = true })
-    end
-  end
-  solid_buttons()
-  api.nvim_create_autocmd("ColorScheme", { callback = solid_buttons })
+  api.nvim_create_autocmd("ColorScheme", {
+    callback = function()
+      tinted = {}
+    end,
+  })
   api.nvim_create_user_command("Launcher", M.open, {})
   api.nvim_create_user_command("LauncherRefresh", M.refresh, {})
   api.nvim_create_autocmd("VimResized", {
     callback = function()
       if S.bar_win and api.nvim_win_is_valid(S.bar_win) then
         paint_bar()
+      end
+      if S.chip_win then
+        paint_chips()
       end
     end,
   })

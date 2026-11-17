@@ -47,7 +47,7 @@ case $3 in
 esac
 EOF
 chmod +x "$tmp/bin/termux-am" "$tmp/bin/cmd" "$tmp/bin/pm" "$tmp/bin/aapt"
-printf '* TODO water the plants\n  SCHEDULED: <%s>\n' "$(date +%Y-%m-%d)" >"$tmp/org/todo.org"
+printf '* TODO water the plants :garden:\n  SCHEDULED: <%s>\n' "$(date +%Y-%m-%d)" >"$tmp/org/todo.org"
 
 export PATH="$tmp/bin:$PATH" ORG_DIR="$tmp/org" XDG_CONFIG_HOME="$tmp/config" \
   XDG_DATA_HOME="$tmp/data" XDG_STATE_HOME="$tmp/state" XDG_CACHE_HOME="$tmp/cache"
@@ -106,6 +106,12 @@ expect "tapping a result launches it" grep -qx "start -n org.fdroid.fdroid/.view
 
 tap 25 "$height"
 expect "tapping the star shows the inbox file" not_on_screen "water the plants"
+expect "note mode shows a todo chip and a chip per org tag" on_screen "^ TODO   garden$"
+chips=$(screen | grep -n "^ TODO   garden$" | cut -d: -f1)
+fg_colors() { tmux capture-pane -e -p -t "$session" | sed -n "$1" | grep -o '38;2;[0-9;]*m' | sort -u | wc -l; }
+expect "each button has its own colour" test "$(fg_colors "$((height - 1))p")" -ge 3
+expect "the todo chip and the tag chip have different colours" test "$(fg_colors "${chips}p")" -ge 2
+tap 10 "$chips"
 keys b u y Space m i l k Enter
 button_colors() {
   tmux capture-pane -e -p -t "$session" | tail -n 3 | sed 's/ *$//' |
@@ -115,7 +121,7 @@ expect "the active button is one solid colour on all three rows, the other is tr
   test "$(button_colors)" = "3 "
 expect "the main window has no background" sh -c \
   "! tmux capture-pane -e -p -t $session | head -n 10 | grep -q '48;2;'"
-expect "Enter in note mode appends a headline" grep -qx "\* buy milk" "$tmp/org/inbox.org"
+expect "Enter in note mode appends a TODO headline with the tapped tag" grep -qx "\* TODO buy milk :garden:" "$tmp/org/inbox.org"
 expect "the saved note is visible" on_screen "buy milk"
 keys c a m
 sleep 0.3
@@ -125,8 +131,9 @@ tap 30 "$((height - 2))"
 expect "tapping the top row of the note button works too" on_screen "com.android.camera"
 
 tap 45 "$height"
+tap 3 "$chips"
 keys Enter
-expect "the second note button writes to its own file" grep -qx "\* cam" "$tmp/org/note.org"
+expect "tapping the todo chip drops TODO, and saving cleared the tag" grep -qx "\* cam" "$tmp/org/note.org"
 expect "the first notes file is left alone" sh -c "! grep -q cam '$tmp/org/inbox.org'"
 tap 45 "$height"
 expect "tapping the active note button returns to search" on_screen "water the plants"

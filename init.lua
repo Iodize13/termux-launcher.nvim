@@ -22,7 +22,6 @@ local function transparent()
     "StatusLine",
     "StatusLineNC",
     "MsgArea",
-    "LauncherButton",
   }) do
     vim.api.nvim_set_hl(0, name, { fg = fg })
   end
