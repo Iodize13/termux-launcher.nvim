@@ -6,7 +6,7 @@ An nvim config that turns a Termux session into a touch-driven app launcher.
 - Typing runs a fuzzy search over installed apps. The prompt sits at the bottom next to the keyboard, and results grow upward with the best match directly above it.
 - Enter or a tap starts the app with `termux-am start -n <package/activity>`.
 - Tapping the star swaps the prompt from search to note. Enter then appends a headline to `~/org/inbox.org`. The pencil does the same for `~/org/note.org`.
-- In note mode a row of chips sits above the prompt. The first is `TODO`, which is on by default. The rest are the tags already used in `~/org`. Tapping a chip toggles it, so `buy milk` with `Shopping` tapped saves as `* TODO buy milk :Shopping:`.
+- In note mode a row of chips sits above the prompt. The first is `TODO`, which is on by default. The rest are the tags listed in `init.lua`. Tapping a chip toggles it, so `buy milk` with `Shopping` tapped saves as `* TODO buy milk :Shopping:`.
 
 ## Install
 
@@ -48,7 +48,7 @@ The config loads [teamtype-nvim](https://github.com/teamtype/teamtype-nvim). Whe
 | --- | --- | --- |
 | `notes` | `~/org/note.org` with `✎` | list of `{ file, icon }`. Each entry gets a button after the house |
 | `todo` | `"TODO"` | keyword new notes start with. `false` drops the chip |
-| `tags` | every tag in the orgmode files | function returning the tags offered as chips |
+| `tags` | every tag in the orgmode files | list of tags offered as chips, or a function returning one |
 | `note` | headline plus inactive timestamp | function from the typed text and `{ todo, tags }` to the lines to append |
 | `spacing` | `1` | blank rows between results, for larger tap targets |
 | `button_rows` | `3` | height of the home and note buttons, which share the screen width evenly |

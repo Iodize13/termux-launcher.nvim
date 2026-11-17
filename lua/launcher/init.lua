@@ -46,7 +46,7 @@ local config = {
   notes = { { file = "~/org/note.org", icon = "✎" } }, ---@type { file: string, icon: string }[]
   -- New notes start with this keyword. A chip above the prompt turns it off. false drops the chip.
   todo = "TODO", ---@type string|false
-  -- Tags offered as chips above the prompt while writing a note.
+  -- Tags offered as chips above the prompt while writing a note: a list, or a function returning one.
   tags = function()
     local ok, list = pcall(function()
       return require("orgmode").files:get_tags()
@@ -328,7 +328,7 @@ end
 local function enter(target)
   S.target, S.view = target, nil
   if target then
-    S.tag_list = config.tags()
+    S.tag_list = type(config.tags) == "function" and config.tags() or config.tags
   end
   chrome()
   render()

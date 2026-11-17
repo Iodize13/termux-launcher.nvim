@@ -151,6 +151,7 @@ vim.api.nvim_create_autocmd("FileType", {
 })
 
 require("launcher").setup({
+  tags = { "Grocery", "Qualiva", "Shopping", "University" },
   notes = {
     { file = org_dir .. "/inbox.org", icon = "✦" },
     { file = org_dir .. "/note.org", icon = "✎" },

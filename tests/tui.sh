@@ -106,8 +106,9 @@ expect "tapping a result launches it" grep -qx "start -n org.fdroid.fdroid/.view
 
 tap 25 "$height"
 expect "tapping the star shows the inbox file" not_on_screen "water the plants"
-expect "note mode shows a todo chip and a chip per org tag" on_screen "^ TODO   garden$"
-chips=$(screen | grep -n "^ TODO   garden$" | cut -d: -f1)
+expect "note mode shows a todo chip and a chip per configured tag, not the org file's tag" \
+  on_screen "^ TODO   Grocery   Qualiva   Shopping   University$"
+chips=$(screen | grep -n "^ TODO   Grocery" | cut -d: -f1)
 fg_colors() { tmux capture-pane -e -p -t "$session" | sed -n "$1" | grep -o '38;2;[0-9;]*m' | sort -u | wc -l; }
 expect "each button has its own colour" test "$(fg_colors "$((height - 1))p")" -ge 3
 expect "the todo chip and the tag chip have different colours" test "$(fg_colors "${chips}p")" -ge 2
@@ -121,7 +122,7 @@ expect "the active button is one solid colour on all three rows, the other is tr
   test "$(button_colors)" = "3 "
 expect "the main window has no background" sh -c \
   "! tmux capture-pane -e -p -t $session | head -n 10 | grep -q '48;2;'"
-expect "Enter in note mode appends a TODO headline with the tapped tag" grep -qx "\* TODO buy milk :garden:" "$tmp/org/inbox.org"
+expect "Enter in note mode appends a TODO headline with the tapped tag" grep -qx "\* TODO buy milk :Grocery:" "$tmp/org/inbox.org"
 expect "the saved note is visible" on_screen "buy milk"
 keys c a m
 sleep 0.3
