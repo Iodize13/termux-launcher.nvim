@@ -84,10 +84,12 @@ expect() {
 }
 on_screen() { screen | grep -q -- "$1"; }
 not_on_screen() { ! on_screen "$1"; }
+# expect expands its arguments once, so a command substitution must sit in quotes to be re-run on each try.
+holds() { eval "$1"; }
 
 expect "home shows the org agenda" on_screen "water the plants"
 height=$(tmux display -p -t "$session" '#{pane_height}')
-expect "buttons are three rows tall at the bottom" test "$(bar)" = "$((height - 1))"
+expect "buttons are three rows tall at the bottom" holds 'test "$(bar)" = "$((height - 1))"'
 expect "app list was built on first run" grep -q firefox "$tmp/cache/nvim/launcher-apps.tsv"
 
 keys f i r e
@@ -110,8 +112,8 @@ expect "note mode shows a todo chip and a chip per configured tag, not the org f
   on_screen "^ TODO   Grocery   Qualiva   Shopping   University$"
 chips=$(screen | grep -n "^ TODO   Grocery" | cut -d: -f1)
 fg_colors() { tmux capture-pane -e -p -t "$session" | sed -n "$1" | grep -o '38;2;[0-9;]*m' | sort -u | wc -l; }
-expect "each button has its own colour" test "$(fg_colors "$((height - 1))p")" -ge 3
-expect "the todo chip and the tag chip have different colours" test "$(fg_colors "${chips}p")" -ge 2
+expect "each button has its own colour" holds 'test "$(fg_colors "$((height - 1))p")" -ge 3'
+expect "the todo chip and the tag chip have different colours" holds 'test "$(fg_colors "${chips}p")" -ge 2'
 tap 10 "$chips"
 keys b u y Space m i l k Enter
 button_colors() {
@@ -119,11 +121,12 @@ button_colors() {
     grep -o '48;2;[0-9;]*m' | sort | uniq -c | tr -s ' ' | cut -d' ' -f2 | tr '\n' ' '
 }
 expect "the active button is one solid colour on all three rows, the other is transparent" \
-  test "$(button_colors)" = "3 "
+  holds 'test "$(button_colors)" = "3 "'
 expect "the main window has no background" sh -c \
   "! tmux capture-pane -e -p -t $session | head -n 10 | grep -q '48;2;'"
 expect "Enter in note mode appends a TODO headline with the tapped tag" grep -qx "\* TODO buy milk :Grocery:" "$tmp/org/inbox.org"
 expect "the saved note is visible" on_screen "buy milk"
+expect "the headline star shows as a bullet" on_screen "◉ TODO buy milk"
 keys c a m
 sleep 0.3
 expect "typing in note mode does not search" not_on_screen "com.android.camera"
