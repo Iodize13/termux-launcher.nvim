@@ -104,7 +104,7 @@ row=$(screen | grep -n "org.fdroid.fdroid" | cut -d: -f1)
 tap 10 "$row"
 expect "tapping a result launches it" grep -qx "start -n org.fdroid.fdroid/.views.main.MainActivity" "$tmp/launched"
 
-tap 48 "$height"
+tap 25 "$height"
 expect "tapping the pencil shows the notes file" not_on_screen "water the plants"
 keys b u y Space m i l k Enter
 button_colors() {
@@ -124,11 +124,18 @@ expect "typing in note mode does not search" not_on_screen "com.android.camera"
 tap 30 "$((height - 2))"
 expect "tapping the top row of the note button works too" on_screen "com.android.camera"
 
+tap 45 "$height"
+keys Enter
+expect "the second note button writes to its own file" grep -qx "\* cam" "$tmp/org/inbox.org"
+expect "the first notes file is left alone" sh -c "! grep -q cam '$tmp/org/note.org'"
+tap 45 "$height"
+expect "tapping the active note button returns to search" on_screen "water the plants"
+
 keys Escape t e r m
 expect "package-only match is listed" on_screen "Clock"
 expect "a label match outranks a package-name match" sh -c "tmux capture-pane -p -t $session | grep -B2 '> term' | head -n 1 | grep -q 'Termux'"
 
-tap 20 "$height"
+tap 5 "$height"
 expect "tapping home returns to the agenda" on_screen "water the plants"
 
 exit "$failed"

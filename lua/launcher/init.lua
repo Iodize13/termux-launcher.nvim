@@ -7,7 +7,7 @@ local ns_sel = api.nvim_create_namespace("launcher_sel")
 local root = vim.fs.dirname(vim.fs.dirname(vim.fs.dirname(debug.getinfo(1, "S").source:sub(2))))
 
 local S = {
-  mode = "search", ---@type "search"|"note"
+  target = nil, ---@type integer?  index into config.notes while writing a note, nil while searching
   view = nil, ---@type "home"|"results"|"notes"|nil  what the main window shows
   items = {}, ---@type LauncherItem[]
   matches = {}, ---@type LauncherItem[]
@@ -38,14 +38,15 @@ local config = {
   cache = fn.stdpath("cache") .. "/launcher-apps.tsv",
   refresh_cmd = { root .. "/bin/launcher-apps" },
   launch_cmd = nil, ---@type string[]?  defaults to termux-am, then am
-  notes_file = "~/org/inbox.org",
+  -- Each entry gets its own button, in this order after the home button.
+  notes = { { file = "~/org/note.org", icon = "✎" } }, ---@type { file: string, icon: string }[]
   note = function(text)
     return { "* " .. text, "  [" .. os.date("%Y-%m-%d %a %H:%M") .. "]" }
   end,
   spacing = 1,
-  -- Height of the home and note buttons in rows. Each button is half the screen wide.
+  -- Height of the home and note buttons in rows. The buttons share the screen width evenly.
   button_rows = 3,
-  icons = { search = ">", note = "✎", home = "⌂" },
+  icons = { search = ">", home = "⌂" },
   -- Runs with the main window current and must leave the home buffer in it.
   home = function()
     local ok, org = pcall(require, "orgmode")
@@ -88,7 +89,7 @@ end
 function views.notes()
   if S.view ~= "notes" then
     api.nvim_win_call(S.main_win, function()
-      vim.cmd.edit(fn.fnameescape(fn.expand(config.notes_file)))
+      vim.cmd.edit(fn.fnameescape(fn.expand(config.notes[S.target].file)))
       vim.cmd("normal! G")
     end)
   end
@@ -144,7 +145,7 @@ local function set_query(text)
 end
 
 local function save_note(text)
-  local path = fn.expand(config.notes_file)
+  local path = fn.expand(config.notes[S.target].file)
   fn.mkdir(vim.fs.dirname(path), "p")
   local buf = fn.bufadd(path)
   fn.bufload(buf)
@@ -185,8 +186,12 @@ local modes = {
   },
 }
 
+local function mode()
+  return modes[S.target and "note" or "search"]
+end
+
 local function render()
-  modes[S.mode].render(query())
+  mode().render(query())
 end
 
 local function focus_prompt()
@@ -197,13 +202,14 @@ end
 local paint_bar
 
 local function chrome()
-  vim.wo[S.prompt_win].statuscolumn = "%#LauncherIcon# " .. config.icons[S.mode] .. " "
+  local icon = S.target and config.notes[S.target].icon or config.icons.search
+  vim.wo[S.prompt_win].statuscolumn = "%#LauncherIcon# " .. icon .. " "
   paint_bar()
   vim.cmd.redrawstatus()
 end
 
 function M.submit()
-  modes[S.mode].submit(query())
+  mode().submit(query())
   render()
 end
 
@@ -212,12 +218,23 @@ function M.move(delta)
   paint_selection()
 end
 
---- Swap search and note. The typed text stays, so a half-typed search can become a note.
-function M.toggle()
-  S.mode = S.mode == "search" and "note" or "search"
+-- The typed text stays, so a half-typed search can become a note.
+local function enter(target)
+  S.target, S.view = target, nil
   chrome()
   render()
   focus_prompt()
+end
+
+--- Write to note `target`, or go back to search when it is already the active one.
+function M.toggle(target)
+  enter(S.target ~= target and target or nil)
+end
+
+--- Step through search and every note in turn.
+function M.cycle()
+  local target = (S.target or 0) + 1
+  enter(config.notes[target] and target or nil)
 end
 
 function M.tap()
@@ -255,14 +272,20 @@ local function ensure_buffers()
     return
   end
   S.prompt_buf, S.list_buf, S.bar_buf = scratch(), scratch(), scratch()
-  map(S.bar_buf, { "i", "n" }, "<LeftRelease>", function()
-    M.bar_tap()
-  end)
+  -- Two quick taps on a button arrive as a double click, which starts a selection in the bar.
+  for _, lhs in ipairs({ "<LeftRelease>", "<2-LeftRelease>", "<3-LeftRelease>", "<4-LeftRelease>" }) do
+    map(S.bar_buf, { "i", "n", "x" }, lhs, function()
+      if fn.mode() ~= "n" then
+        vim.cmd("normal! \27")
+      end
+      M.bar_tap()
+    end)
+  end
   vim.bo[S.list_buf].modifiable = false
 
   api.nvim_create_autocmd({ "TextChangedI", "TextChanged" }, { buffer = S.prompt_buf, callback = render })
   map(S.prompt_buf, { "i", "n" }, "<CR>", M.submit)
-  map(S.prompt_buf, { "i", "n" }, "<Tab>", M.toggle)
+  map(S.prompt_buf, { "i", "n" }, "<Tab>", M.cycle)
   map(S.prompt_buf, { "i", "n" }, "<Esc>", M.open)
   for lhs, delta in pairs({ ["<Up>"] = 1, ["<C-p>"] = 1, ["<Down>"] = -1, ["<C-n>"] = -1 }) do
     map(S.prompt_buf, { "i", "n" }, lhs, function()
@@ -294,23 +317,36 @@ local function ensure_layout()
   vim.wo[S.prompt_win].statusline = "%!v:lua.require'launcher'.buttons()"
 end
 
-local buttons = {
-  { icon = "home", tap = function() M.open() end, active = function() return false end },
-  { icon = "note", tap = function() M.toggle() end, active = function() return S.mode == "note" end },
-}
+---@type { icon: string, tap: fun(), active: fun(): boolean }[]
+local buttons = {}
+
+local function build_buttons()
+  buttons = { { icon = config.icons.home, tap = function() M.open() end, active = function() return false end } }
+  for target, note in ipairs(config.notes) do
+    buttons[#buttons + 1] = {
+      icon = note.icon,
+      tap = function() M.toggle(target) end,
+      active = function() return S.target == target end,
+    }
+  end
+end
 
 local function button_hl(id)
   return buttons[id].active() and "LauncherButtonOn" or "LauncherButton"
 end
 
--- One row of the two buttons as padded text. The statusline row and the bar window
--- rows both use it so the seam between the buttons lines up.
+-- Last screen column of button `id`. Drawing and tapping both use it so they agree.
+local function button_edge(width, id)
+  return math.floor(width * id / #buttons)
+end
+
+-- One row of the buttons as padded text. The statusline row and the bar window
+-- rows both use it so the seams between the buttons line up.
 local function button_cells(width, with_icon)
-  local widths = { math.floor(width / 2), width - math.floor(width / 2) }
   local cells = {}
   for id, button in ipairs(buttons) do
-    local icon = with_icon and config.icons[button.icon] or ""
-    local pad = widths[id] - fn.strdisplaywidth(icon)
+    local icon = with_icon and button.icon or ""
+    local pad = button_edge(width, id) - button_edge(width, id - 1) - fn.strdisplaywidth(icon)
     cells[id] = (" "):rep(math.floor(pad / 2)) .. icon .. (" "):rep(pad - math.floor(pad / 2))
   end
   return cells
@@ -328,22 +364,29 @@ function paint_bar()
   if not S.bar_win then
     return
   end
-  local lines, split = {}, {}
+  local rows = {}
   for row = 1, api.nvim_win_get_height(S.bar_win) do
-    local cells = button_cells(api.nvim_win_get_width(S.bar_win), row == 1)
-    lines[row], split[row] = table.concat(cells), #cells[1]
+    rows[row] = button_cells(api.nvim_win_get_width(S.bar_win), row == 1)
   end
-  api.nvim_buf_set_lines(S.bar_buf, 0, -1, false, lines)
-  for row, col in ipairs(split) do
-    api.nvim_buf_set_extmark(S.bar_buf, ns, row - 1, 0, { end_col = col, hl_group = button_hl(1) })
-    api.nvim_buf_set_extmark(S.bar_buf, ns, row - 1, col, { end_col = #lines[row], hl_group = button_hl(2) })
+  api.nvim_buf_set_lines(S.bar_buf, 0, -1, false, vim.tbl_map(table.concat, rows))
+  for row, cells in ipairs(rows) do
+    local col = 0
+    for id, cell in ipairs(cells) do
+      api.nvim_buf_set_extmark(S.bar_buf, ns, row - 1, col, { end_col = col + #cell, hl_group = button_hl(id) })
+      col = col + #cell
+    end
   end
 end
 
 function M.bar_tap()
   local pos = fn.getmousepos()
-  if pos.winid == S.bar_win then
-    buttons[pos.wincol <= math.floor(api.nvim_win_get_width(S.bar_win) / 2) and 1 or 2].tap()
+  if pos.winid ~= S.bar_win then
+    return
+  end
+  for id, button in ipairs(buttons) do
+    if pos.wincol <= button_edge(api.nvim_win_get_width(S.bar_win), id) then
+      return button.tap()
+    end
   end
 end
 
@@ -361,7 +404,7 @@ function M.open()
     end
   end
   vim.go.statusline = "%#WinSeparator#%{repeat('─', winwidth(0))}"
-  S.mode, S.view = "search", nil
+  S.target, S.view = nil, nil
   set_query("")
   chrome()
   render()
@@ -372,6 +415,7 @@ function M.setup(opts)
   config = vim.tbl_deep_extend("force", config, opts or {})
   config.launch_cmd = config.launch_cmd
     or { fn.executable("termux-am") == 1 and "termux-am" or "am", "start", "-n" }
+  build_buttons()
 
   _G.LauncherTap = function(id)
     vim.schedule(buttons[id].tap)

@@ -90,7 +90,12 @@ vim.api.nvim_create_autocmd("FileType", {
   end,
 })
 
-require("launcher").setup({ notes_file = org_dir .. "/note.org" })
+require("launcher").setup({
+  notes = {
+    { file = org_dir .. "/note.org", icon = "✎" },
+    { file = org_dir .. "/inbox.org", icon = "✦" },
+  },
+})
 
 vim.api.nvim_create_autocmd("VimEnter", {
   callback = function()
