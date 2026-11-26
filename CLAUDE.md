@@ -6,6 +6,58 @@ The launcher runs on a phone in Termux. `CLAUDE.local.md` holds the ssh command 
 current phone. It stays out of git because this repo is public. Below, `phone` stands for
 that command.
 
+## Reaching the phone
+
+Today `phone` goes over Tailscale. Banking apps on the phone refuse to run while any VPN is
+up, and Tailscale is a VPN on Android, so the user turns it off to bank. While it is off,
+`phone` times out. Ask the user to turn Tailscale back on, and wait until `tailscale status`
+no longer lists the phone as offline.
+
+Keep "Use Tailscale DNS" off in the phone's Tailscale app. With it on, Termux could not
+resolve any public name, and `git pull` failed with `Could not resolve host: github.com`.
+
+The org sync does not need Tailscale. teamtype reaches its peer through iroh relays on port
+443.
+
+sshd on the phone accepts keys only. `PasswordAuthentication no` and
+`KbdInteractiveAuthentication no` are appended to `$PREFIX/etc/ssh/sshd_config`, and the
+file as it was before is in `sshd_config.bak`. To restart sshd without dropping your own
+session, kill only the listener in `$PREFIX/var/run/sshd.pid`, then run `sshd`.
+
+### Cloudflare Tunnel (unfinished)
+
+The plan is to reach the phone through a Cloudflare Tunnel, which runs as an ordinary
+process and is not a VPN, so banking keeps working:
+
+```
+desktop ssh -> cloudflared access (ProxyCommand) -> Cloudflare -> cloudflared on the phone -> sshd :8022
+```
+
+Status: `cloudflared` 2026.11.2 is installed in Termux, and this machine has 2026.10.2.
+`cloudflared tunnel login` on the phone ended with `Failed to fetch resource` and wrote no
+`~/.cloudflared/cert.pem`. A named tunnel needs a domain on Cloudflare, and the user has not
+named one yet.
+
+Remaining steps, with `<host>` for the chosen hostname:
+
+1. On the phone, in the `claude` tmux session: `cloudflared tunnel login`, then
+   `cloudflared tunnel create phone`, `cloudflared tunnel route dns phone <host>`, and keep
+   `termux-wake-lock; cloudflared tunnel run --url ssh://localhost:8022 phone` running.
+   Without the wake lock, Android stops it when the screen goes off.
+2. On this machine, add to `~/.ssh/config`:
+   ```
+   Host phone
+     HostName <host>
+     User <user>
+     ProxyCommand cloudflared access ssh --hostname %h
+   ```
+   Then make `CLAUDE.local.md` say `ssh phone`.
+3. The user adds a Cloudflare Access application for `<host>` in the dashboard, allowing
+   only their own account. Without it, anyone who knows the hostname reaches sshd.
+4. With Tailscale off on the phone, check that `ssh phone true` works.
+
+The hostname, tunnel ID, and `~/.cloudflared/*.json` credentials stay out of this repo.
+
 Run nvim, the launcher, the sync daemon, and anything else that stays open or
 needs input inside a tmux session named `claude`. The session keeps running when
 SSH drops, and `capture-pane` prints its screen.
@@ -52,13 +104,14 @@ The old phone was a Pixel 5a running Termux from F-Droid, with `com.termux.styli
 1. The user installs Termux and Tailscale on the new phone. Then, in Termux:
    ```sh
    pkg update && pkg upgrade
-   pkg install openssh tmux neovim git clang termux-am-socket aapt
+   pkg install openssh tmux neovim git clang termux-am-socket aapt cloudflared
    passwd
    sshd
    whoami
    ```
    They give you the `whoami` user and the phone's Tailscale `100.x` address. sshd listens
-   on port 8022.
+   on port 8022. Once your key is installed in step 2, turn off password login as described
+   in "Reaching the phone", and have them turn off "Use Tailscale DNS".
 2. Write `ssh -p 8022 <user>@<address>` into `CLAUDE.local.md`. Install this machine's key
    with `ssh-copy-id -p 8022 <user>@<address>`, so later commands need no password.
 3. Clone the config:
