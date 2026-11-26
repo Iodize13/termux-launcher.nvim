@@ -24,6 +24,17 @@ The first start clones [lazy.nvim](https://github.com/folke/lazy.nvim), which in
 
 The config loads [teamtype-nvim](https://github.com/teamtype/teamtype-nvim). When `teamtype` is installed and `~/org/.teamtype/config` names a peer, the launcher starts `teamtype join` for `~/org` and stops it on exit, so the directory syncs with other devices in real time. Otherwise the plugin does nothing.
 
+The other end is a desktop that runs the daemon all the time with [desktop/teamtype-org.service](desktop/teamtype-org.service), a systemd user unit:
+
+```sh
+cp desktop/teamtype-org.service ~/.config/systemd/user/
+systemctl --user enable --now teamtype-org
+```
+
+`~/org/.teamtype/config` and `~/org/.teamtype/key` stay out of this repo. The config holds the peer's node ID and its passphrase, and the key is the device's private key, so anyone with them could join the sync. Each device makes its own with `teamtype share` and `teamtype join <code>`.
+
+teamtype connects through iroh relays over port 443, so the sync needs no VPN.
+
 ## Use
 
 | Input | Effect |

@@ -1,0 +1,12 @@
+[Unit]
+Description=Teamtype sync for ~/org
+After=network-online.target
+
+[Service]
+ExecStartPre=/usr/bin/rm -f %h/org/.teamtype/socket
+ExecStart=/usr/bin/teamtype join --username desktop --directory %h/org
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target

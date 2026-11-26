@@ -68,8 +68,10 @@ The old phone was a Pixel 5a running Termux from F-Droid, with `com.termux.styli
 4. Install teamtype into `$PREFIX/bin`. The old phone ran teamtype 0.9.3, the same version
    as this machine. Nobody recorded how that binary was built. Termux has a `rust` package,
    so building it in Termux with cargo is the likely route, but nobody has tested it.
-5. Join the org sync. On this machine, run `teamtype share` in `~/org`, which prints a
-   join code. On the phone, run `mkdir -p ~/org`, then `teamtype join <code> --directory ~/org`
+5. Join the org sync. On this machine the daemon runs as the systemd user unit in
+   `desktop/teamtype-org.service`. Stop it with `systemctl --user stop teamtype-org`, run
+   `teamtype share` in `~/org`, which prints a join code, and start the unit again once the
+   phone has joined. On the phone, run `mkdir -p ~/org`, then `teamtype join <code> --directory ~/org`
    inside the `claude` tmux session. That writes `~/org/.teamtype/config`, and from then on
    the launcher starts the daemon itself. The join code is a secret, so keep it out of
    every file in this repo.
